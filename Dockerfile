@@ -29,5 +29,8 @@ RUN mkdir -p ./cache
 # Expose port
 EXPOSE 8000
 
+# Set environment variable for port
+ENV PORT=8000
+
 # Start the application
 CMD ["./start.sh"] 
