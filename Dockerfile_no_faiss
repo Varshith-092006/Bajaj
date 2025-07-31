@@ -1,40 +1,95 @@
-# Use Python 3.11 slim image for smaller size
-FROM python:3.11-slim
+# # Use Python 3.11 slim image for smaller size
+# FROM python:3.11-slim
 
-# Set working directory
-WORKDIR /app
+# # Set working directory
+# WORKDIR /app
 
-# Install system dependencies required for PyMuPDF and others
-RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
-    curl \
+# # Install system dependencies required for PyMuPDF and others
+# RUN apt-get update && apt-get install -y \
+#     gcc \
+#     g++ \
+#     curl \
+#     libmupdf-dev \
+#     libmupdf-thirdparty-dev \
+#     && rm -rf /var/lib/apt/lists/*
+
+# # Copy requirements first for better caching
+# COPY requirements_no_faiss.txt .
+
+# # Install Python dependencies
+# RUN pip install --no-cache-dir -r requirements_no_faiss.txt
+
+# # Copy application code
+# COPY production_api_no_faiss.py .
+
+# # Create cache directory
+# RUN mkdir -p cache
+
+# # Set environment variables
+# ENV PYTHONPATH=/app
+# ENV PYTHONUNBUFFERED=1
+
+# # Expose port
+# EXPOSE 8000
+
+# # Health check
+# HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+#     CMD curl -f http://localhost:8000/health || exit 1
+
+# # Run the application
+# CMD ["python", "production_api_no_faiss.py"]
+# Multi-stage build for smaller final image
+# Multi-stage build for smaller final image
+# Build stage
+FROM python:3.11-slim as builder
+
+# Install system dependencies with cleanup
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
     libmupdf-dev \
-    libmupdf-thirdparty-dev \
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
+WORKDIR /app
 COPY requirements_no_faiss.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements_no_faiss.txt
+# Install Python dependencies with precise versions
+RUN pip install --user --no-cache-dir --upgrade pip && \
+    pip install --user --no-cache-dir -r requirements_no_faiss.txt
 
-# Copy application code
-COPY production_api_no_faiss.py .
+# Runtime stage
+FROM python:3.11-slim
 
-# Create cache directory
-RUN mkdir -p cache
+# Install runtime dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    libmupdf1 \
+    libjbig2dec0 \
+    libopenjp2-7 \
+    libfreetype6 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy from builder
+COPY --from=builder /root/.local /root/.local
+COPY . .
 
 # Set environment variables
-ENV PYTHONPATH=/app
-ENV PYTHONUNBUFFERED=1
+ENV PATH=/root/.local/bin:$PATH \
+    PYTHONPATH=/app \
+    PYTHONUNBUFFERED=1 \
+    PORT=8000
 
-# Expose port
-EXPOSE 8000
+# Create cache directory with proper permissions
+RUN mkdir -p cache && chmod 777 cache
+
+EXPOSE $PORT
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:$PORT/health || exit 1
 
-# Run the application
-CMD ["python", "production_api_no_faiss.py"]
+# Production server command
+CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:$PORT", "production_api_no_faiss:app"]
