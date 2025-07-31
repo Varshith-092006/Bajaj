@@ -12,10 +12,10 @@ fi
 # Create cache directory if it doesn't exist
 mkdir -p ./cache
 
-# Test PyMuPDF import
-echo "Testing PyMuPDF import..."
-python3 -c "import fitz; print('PyMuPDF imported successfully')" || {
-    echo "Error: PyMuPDF import failed"
+# Test pdfplumber import
+echo "Testing pdfplumber import..."
+python3 -c "import pdfplumber; print('pdfplumber imported successfully')" || {
+    echo "Error: pdfplumber import failed"
     exit 1
 }
 

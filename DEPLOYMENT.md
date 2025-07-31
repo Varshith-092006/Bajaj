@@ -48,50 +48,23 @@
 
 ### Common Issues
 
-1. **PyMuPDF Compilation Failures**
-   - **Problem**: PyMuPDF fails to compile during build
-   - **Solution**: The current configuration includes all necessary system dependencies
-   - **Fallback**: If PyMuPDF still fails, use `production_api_fallback.py` with pdfplumber
-
-2. **Build Failures**
+1. **Build Failures**
    - Check Render logs for specific error messages
    - Ensure all dependencies are in `requirements.txt`
-   - Verify system packages are installed in build command
+   - Verify the build command is correct
 
-3. **Runtime Errors**
+2. **Runtime Errors**
    - Check application logs in Render dashboard
    - Verify `GEMINI_API_KEY` is set correctly
    - Ensure all required files are present
 
-4. **Memory Issues**
+3. **Memory Issues**
    - Reduce worker count in gunicorn configuration
    - Optimize model loading and caching
 
-### PyMuPDF Specific Issues
-
-If you encounter PyMuPDF compilation errors, try these solutions:
-
-1. **Use Fallback Version**
-   ```bash
-   # Rename the fallback version to main
-   mv production_api_fallback.py production_api.py
-   ```
-
-2. **Update Requirements**
-   ```bash
-   # Use the fallback requirements
-   cp requirements_fallback.txt requirements.txt
-   ```
-
-3. **Alternative Build Command**
-   ```yaml
-   buildCommand: |
-     apt-get update && apt-get install -y \
-       libmupdf-dev python3-dev pkg-config build-essential \
-       gcc g++ make cmake
-     export MU_PDF_USE_SYSTEM_LIBS=1
-     pip install --no-cache-dir -r requirements.txt
-   ```
+4. **PDF Processing Issues**
+   - The application uses pdfplumber for PDF text extraction
+   - If PDF processing fails, check the PDF format and accessibility
 
 ### Logs and Monitoring
 - View logs in Render dashboard under your service
@@ -132,20 +105,22 @@ curl -X POST https://your-app-name.onrender.com/api/v1/hackrx/run \
 - Consider rate limiting for production use
 - Monitor API usage and costs
 
-## Alternative Deployment Options
+## Technical Details
 
-### Option 1: Use pdfplumber (More Stable)
-If PyMuPDF continues to fail, use the fallback version:
+### PDF Processing
+- Uses **pdfplumber** for PDF text extraction
+- Supports most standard PDF formats
+- Includes caching for improved performance
 
-1. Replace `production_api.py` with `production_api_fallback.py`
-2. Use `requirements_fallback.txt` instead of `requirements.txt`
-3. Deploy normally
+### Dependencies
+- **FastAPI**: Web framework
+- **pdfplumber**: PDF text extraction
+- **sentence-transformers**: Text embeddings
+- **faiss-cpu**: Vector similarity search
+- **google-generativeai**: Gemini AI integration
 
-### Option 2: Use Pre-built PyMuPDF
-```bash
-# Add to requirements.txt
-PyMuPDF-binary==1.23.7
-```
-
-### Option 3: Use Docker
-Create a Dockerfile for more control over the build environment. 
+### Performance Optimizations
+- Caching for PDF text and embeddings
+- Semantic text chunking
+- Re-ranking for better search results
+- Background processing for large documents 

@@ -3,13 +3,11 @@ import time
 import json
 import pickle
 import hashlib
-import fitz  # PyMuPDF
-import faiss
+import requests
+import tempfile
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 import google.generativeai as genai
-import requests
-import tempfile
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -43,6 +41,15 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     logger.warning("GEMINI_API_KEY not found in environment variables")
+
+# Import pdfplumber for PDF processing
+try:
+    import pdfplumber
+    PDF_LIBRARY = "pdfplumber"
+    logger.info("Using pdfplumber for PDF processing")
+except ImportError:
+    PDF_LIBRARY = None
+    logger.error("pdfplumber not available")
 
 class QueryRequest(BaseModel):
     query: str
@@ -99,6 +106,25 @@ def clean_text(text):
     text = text.replace('\x00', '').replace('\ufffd', '')
     return text
 
+def extract_text_with_pdfplumber(pdf_path: str) -> str:
+    """Extract text using pdfplumber"""
+    try:
+        text_parts = []
+        with pdfplumber.open(pdf_path) as pdf:
+            for page in pdf.pages:
+                try:
+                    text = page.extract_text()
+                    if text:
+                        text_parts.append(text)
+                except Exception as e:
+                    logger.warning(f"Error extracting page: {e}")
+                    continue
+        
+        return clean_text("\n".join(text_parts))
+    except Exception as e:
+        logger.error(f"pdfplumber extraction failed: {e}")
+        raise
+
 def download_and_extract_text_optimized(url: str) -> str:
     """Enhanced PDF text extraction with better error handling"""
     try:
@@ -119,44 +145,23 @@ def download_and_extract_text_optimized(url: str) -> str:
             tmp.write(response.content)
             tmp_path = tmp.name
         
-        doc = fitz.open(tmp_path)
-        text_parts = []
-        
-        for page_num, page in enumerate(doc):
-            try:
-                text = page.get_text("text")
-                if not text.strip():
-                    text_dict = page.get_text("dict")
-                    text = extract_text_from_dict(text_dict)
-                text_parts.append(text)
-            except Exception as e:
-                logger.warning(f"Error extracting page {page_num} from {url}: {e}")
-                continue
-        
-        full_text = clean_text("\n".join(text_parts))
+        # Use pdfplumber for text extraction
+        if PDF_LIBRARY == "pdfplumber":
+            full_text = extract_text_with_pdfplumber(tmp_path)
+        else:
+            raise ValueError("No PDF library available")
         
         # Cache the result
         save_to_cache(full_text, url_hash, "pdf_text")
         
         # Cleanup
         os.unlink(tmp_path)
-        doc.close()
         
         return full_text
         
     except Exception as e:
         logger.error(f"Error processing PDF {url}: {e}")
         raise ValueError(f"Failed to process PDF: {str(e)}")
-
-def extract_text_from_dict(text_dict):
-    """Extract text from PyMuPDF dict format"""
-    text_parts = []
-    for block in text_dict.get("blocks", []):
-        if "lines" in block:
-            for line in block["lines"]:
-                for span in line.get("spans", []):
-                    text_parts.append(span.get("text", ""))
-    return " ".join(text_parts)
 
 def chunk_text_semantic(text, chunk_size=512, overlap=64):
     """Improved chunking that preserves sentence boundaries"""
@@ -331,6 +336,7 @@ async def lifespan(app: FastAPI):
     # Startup
     global embed_model
     logger.info("Starting up LLM Document Processing API...")
+    logger.info(f"PDF Library: {PDF_LIBRARY}")
     logger.info("Loading embedding model...")
     embed_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
     logger.info("API ready!")
@@ -366,7 +372,8 @@ async def health_check():
         "status": "healthy",
         "timestamp": time.time(),
         "version": "2.0.0",
-        "gemini_configured": bool(GEMINI_API_KEY)
+        "gemini_configured": bool(GEMINI_API_KEY),
+        "pdf_library": PDF_LIBRARY
     }
 
 @app.post("/api/v1/query", response_model=QueryResponse)
@@ -456,6 +463,7 @@ async def root():
     return {
         "message": "LLM Document Processing API v2.0",
         "status": "running",
+        "pdf_library": PDF_LIBRARY,
         "endpoints": {
             "health": "/health",
             "query": "/api/v1/query",
