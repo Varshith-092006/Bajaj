@@ -4,11 +4,13 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies required for PyMuPDF and others
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     curl \
+    libmupdf-dev \
+    libmupdf-thirdparty-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -36,4 +38,3 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
 
 # Run the application
 CMD ["python", "production_api_no_faiss.py"]
-
