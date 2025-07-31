@@ -1,7 +1,7 @@
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 python-dotenv==1.0.0
-PyMuPDF-binary==1.23.8  # Using binary version
+pymupdf==1.23.8  # Standard package (not binary)
 faiss-cpu==1.7.4
 sentence-transformers==2.2.2
 google-generativeai==0.3.2
