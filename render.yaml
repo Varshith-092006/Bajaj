@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: fastapi-insurance-app
+    runtime: python
+    buildCommand: |
+      pip install --no-cache-dir -r requirements.txt
+      python -c "import nltk; nltk.download('punkt')"  # If you need NLTK
+    startCommand: gunicorn -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT production_api:app
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: GEMINI_API_KEY
+        value: AIzaSyBEXmpzj2fCz_9nU4RnrCmW5aon1JmyjiI
