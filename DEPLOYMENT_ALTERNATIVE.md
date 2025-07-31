@@ -1,46 +1,32 @@
 # Alternative Deployment Guide (No Rust Compilation)
 
 ## Problem
-The main deployment is failing due to Rust compilation issues with faiss-cpu on Render's read-only file system.
+The main deployment is failing due to:
+1. Rust compilation issues with faiss-cpu on Render's read-only file system
+2. setuptools.build_meta import errors with Python 3.13
 
 ## Solution
 Use the scikit-learn alternative version that avoids Rust compilation entirely.
 
-## Quick Fix
+## Quick Fix (Recommended)
 
-### Option 1: Use Alternative Version (Recommended)
+### Option 1: Use Alternative Version
 ```bash
 # Replace the main files with the alternative version
 cp production_api_alternative.py production_api.py
 cp requirements_alternative.txt requirements.txt
 ```
 
-### Option 2: Manual File Changes
-
-1. **Update requirements.txt:**
-```txt
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-python-dotenv==1.0.0
-pdfplumber==0.10.3
-scikit-learn==1.3.0
-sentence-transformers==2.2.2
-google-generativeai==0.3.2
-requests==2.31.0
-aiofiles==23.2.1
-gunicorn==21.2.0
-numpy==1.24.3
-huggingface_hub==0.19.4
+### Option 2: Use Minimal Requirements
+```bash
+# Use the minimal requirements that avoid all compilation issues
+cp requirements_minimal.txt requirements.txt
 ```
-
-2. **Update production_api.py:**
-   - Replace faiss imports with scikit-learn
-   - Replace `build_faiss_index_optimized` with `build_vector_index_sklearn`
-   - Replace `search_chunks_enhanced` with `search_chunks_sklearn`
 
 ## Benefits of Alternative Version
 
 ✅ **No Rust compilation** - Uses pure Python libraries
+✅ **No setuptools issues** - Compatible with Python 3.13
 ✅ **Faster deployment** - No complex build process
 ✅ **More reliable** - Fewer dependencies
 ✅ **Same functionality** - All features preserved
@@ -92,4 +78,8 @@ If you need to go back to the FAISS version:
 ```bash
 git checkout HEAD~1
 git push
-``` 
+```
+
+## Current Status
+
+The setuptools.build_meta error indicates compatibility issues with Python 3.13. The scikit-learn alternative version should resolve this completely. 
