@@ -16,8 +16,11 @@ services:
     name: fastapi-insurance-app
     runtime: python
     buildCommand: |
+      export CARGO_HOME=/tmp/cargo
+      export RUSTUP_HOME=/tmp/rustup
+      export PIP_NO_BUILD_ISOLATION=0
       pip install --no-cache-dir --upgrade pip setuptools wheel
-      pip install --no-cache-dir -r requirements.txt
+      pip install --no-cache-dir --only-binary=all -r requirements.txt
       chmod +x start.sh
     startCommand: ./start.sh
     envVars:
