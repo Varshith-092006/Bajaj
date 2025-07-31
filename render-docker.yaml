@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: fastapi-insurance-app-docker
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: GEMINI_API_KEY
+        sync: false
+    healthCheckPath: /health
+    autoDeploy: true 
