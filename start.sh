@@ -18,6 +18,16 @@ python3 -c "import pdfplumber; print('pdfplumber imported successfully')" || {
     echo "Error: pdfplumber import failed"
     exit 1
 }
+echo "Testing numpy import..."
+python3 -c "import numpy; print('numpy imported successfully')" || {
+    echo "Error: numpy import failed"
+    exit 1
+}
+echo "Testing sentence_transformers import..."
+python3 -c "import sentence_transformers; print('sentence_transformers imported successfully')" || {
+    echo "Error: sentence_transformers import failed"
+    exit 1
+}
 
 # Start the application with gunicorn
 echo "Starting application..."
