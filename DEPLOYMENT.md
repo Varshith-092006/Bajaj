@@ -48,19 +48,50 @@
 
 ### Common Issues
 
-1. **Build Failures**
+1. **PyMuPDF Compilation Failures**
+   - **Problem**: PyMuPDF fails to compile during build
+   - **Solution**: The current configuration includes all necessary system dependencies
+   - **Fallback**: If PyMuPDF still fails, use `production_api_fallback.py` with pdfplumber
+
+2. **Build Failures**
    - Check Render logs for specific error messages
    - Ensure all dependencies are in `requirements.txt`
    - Verify system packages are installed in build command
 
-2. **Runtime Errors**
+3. **Runtime Errors**
    - Check application logs in Render dashboard
    - Verify `GEMINI_API_KEY` is set correctly
    - Ensure all required files are present
 
-3. **Memory Issues**
+4. **Memory Issues**
    - Reduce worker count in gunicorn configuration
    - Optimize model loading and caching
+
+### PyMuPDF Specific Issues
+
+If you encounter PyMuPDF compilation errors, try these solutions:
+
+1. **Use Fallback Version**
+   ```bash
+   # Rename the fallback version to main
+   mv production_api_fallback.py production_api.py
+   ```
+
+2. **Update Requirements**
+   ```bash
+   # Use the fallback requirements
+   cp requirements_fallback.txt requirements.txt
+   ```
+
+3. **Alternative Build Command**
+   ```yaml
+   buildCommand: |
+     apt-get update && apt-get install -y \
+       libmupdf-dev python3-dev pkg-config build-essential \
+       gcc g++ make cmake
+     export MU_PDF_USE_SYSTEM_LIBS=1
+     pip install --no-cache-dir -r requirements.txt
+   ```
 
 ### Logs and Monitoring
 - View logs in Render dashboard under your service
@@ -99,4 +130,22 @@ curl -X POST https://your-app-name.onrender.com/api/v1/hackrx/run \
 - Never commit API keys to your repository
 - Use environment variables for sensitive data
 - Consider rate limiting for production use
-- Monitor API usage and costs 
+- Monitor API usage and costs
+
+## Alternative Deployment Options
+
+### Option 1: Use pdfplumber (More Stable)
+If PyMuPDF continues to fail, use the fallback version:
+
+1. Replace `production_api.py` with `production_api_fallback.py`
+2. Use `requirements_fallback.txt` instead of `requirements.txt`
+3. Deploy normally
+
+### Option 2: Use Pre-built PyMuPDF
+```bash
+# Add to requirements.txt
+PyMuPDF-binary==1.23.7
+```
+
+### Option 3: Use Docker
+Create a Dockerfile for more control over the build environment. 
