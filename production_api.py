@@ -39,6 +39,11 @@ index_cache = {}
 CACHE_DIR = "./cache"
 os.makedirs(CACHE_DIR, exist_ok=True)
 
+# Environment validation
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if not GEMINI_API_KEY:
+    logger.warning("GEMINI_API_KEY not found in environment variables")
+
 class QueryRequest(BaseModel):
     query: str
     documents: Optional[List[str]] = None
@@ -265,7 +270,10 @@ RESPONSE FORMAT (JSON only, no markdown):
 
 def query_gemini_optimized(prompt, retries=3):
     """Optimized Gemini query with better error handling"""
-    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
+    
+    genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel("gemini-1.5-flash")
     
     for attempt in range(retries):
@@ -357,7 +365,8 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": time.time(),
-        "version": "2.0.0"
+        "version": "2.0.0",
+        "gemini_configured": bool(GEMINI_API_KEY)
     }
 
 @app.post("/api/v1/query", response_model=QueryResponse)

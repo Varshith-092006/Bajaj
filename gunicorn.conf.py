@@ -39,5 +39,5 @@ keyfile = None
 certfile = None
 
 # Application
-module = "optimized_api:app"
+module = "production_api:app"
 

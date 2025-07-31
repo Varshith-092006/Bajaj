@@ -1,4 +1,0 @@
-libmupdf-dev
-libjbig2dec0
-libopenjp2-7
-libfreetype6

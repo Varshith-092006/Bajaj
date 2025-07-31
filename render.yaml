@@ -16,11 +16,14 @@ services:
     name: fastapi-insurance-app
     runtime: python
     buildCommand: |
-      apt-get update && apt-get install -y libmupdf-dev python3-dev pkg-config
+      apt-get update && apt-get install -y libmupdf-dev python3-dev pkg-config build-essential
       pip install --no-cache-dir -r requirements.txt
-    startCommand: gunicorn -w 1 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT production_api:app
+      chmod +x start.sh
+    startCommand: ./start.sh
     envVars:
       - key: PORT
         value: 8000
       - key: GEMINI_API_KEY
-        value: AIzaSyBEXmpzj2fCz_9nU4RnrCmW5aon1JmyjiI
+        sync: false
+    healthCheckPath: /health
+    autoDeploy: true
