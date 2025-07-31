@@ -17,6 +17,8 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 import asyncio
 from contextlib import asynccontextmanager
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
 
 # Configure logging
 logging.basicConfig(
@@ -191,60 +193,48 @@ def chunk_text_semantic(text, chunk_size=512, overlap=64):
     
     return [chunk for chunk in chunks if chunk.strip()]
 
-def build_faiss_index_optimized(chunks, embed_model):
-    """Build optimized FAISS index with caching"""
+def build_vector_index_sklearn(chunks, embed_model):
+    """Build vector index using scikit-learn with caching"""
     if not chunks:
         raise ValueError("No chunks provided for indexing")
     
     combined_text = "\n".join(chunks)
     cache_key = get_cache_key(combined_text)
     
-    cached_data = load_from_cache(cache_key, "faiss_index")
+    cached_data = load_from_cache(cache_key, "vector_index")
     if cached_data:
-        logger.info("Using cached FAISS index")
-        return cached_data['index'], cached_data['vectors']
+        logger.info("Using cached vector index")
+        return cached_data['vectors'], cached_data['chunks']
     
-    logger.info(f"Building FAISS index for {len(chunks)} chunks")
+    logger.info(f"Building vector index for {len(chunks)} chunks")
     vectors = embed_model.encode(chunks, show_progress_bar=False, batch_size=32)
     
-    if len(vectors) > 1000:
-        nlist = min(100, len(vectors) // 10)
-        index = faiss.IndexIVFFlat(faiss.IndexFlatL2(vectors.shape[1]), vectors.shape[1], nlist)
-        index.train(vectors)
-    else:
-        index = faiss.IndexFlatL2(vectors.shape[1])
+    cache_data = {'vectors': vectors, 'chunks': chunks}
+    save_to_cache(cache_data, cache_key, "vector_index")
     
-    index.add(vectors)
-    
-    cache_data = {'index': index, 'vectors': vectors}
-    save_to_cache(cache_data, cache_key, "faiss_index")
-    
-    return index, vectors
+    return vectors, chunks
 
-def search_chunks_enhanced(index, query, embed_model, all_chunks, top_k=5):
-    """Enhanced search with re-ranking"""
-    if not all_chunks:
+def search_chunks_sklearn(vectors, query, embed_model, all_chunks, top_k=5):
+    """Search chunks using scikit-learn cosine similarity"""
+    if not all_chunks or len(vectors) == 0:
         return []
     
-    q_vec = embed_model.encode([query])
-    scores, indices = index.search(q_vec, min(top_k * 2, len(all_chunks)))
+    # Encode query
+    query_vector = embed_model.encode([query])
     
-    candidates = []
-    for j, i in enumerate(indices[0]):
-        if i < len(all_chunks):
-            candidates.append((all_chunks[i], scores[0][j]))
+    # Calculate cosine similarities
+    similarities = cosine_similarity(query_vector, vectors)[0]
     
-    query_terms = set(query.lower().split())
-    reranked = []
+    # Get top-k indices
+    top_indices = np.argsort(similarities)[::-1][:top_k]
     
-    for chunk, score in candidates:
-        chunk_terms = set(chunk.lower().split())
-        overlap_score = len(query_terms.intersection(chunk_terms)) / max(len(query_terms), 1)
-        combined_score = (1 / (1 + score)) * 0.7 + overlap_score * 0.3
-        reranked.append((chunk, combined_score))
+    # Return top chunks
+    results = []
+    for idx in top_indices:
+        if idx < len(all_chunks):
+            results.append(all_chunks[idx])
     
-    reranked.sort(key=lambda x: x[1], reverse=True)
-    return [chunk for chunk, _ in reranked[:top_k]]
+    return results
 
 def build_enhanced_prompt(context, query):
     """Enhanced prompt for better decision making"""
@@ -299,7 +289,7 @@ def query_gemini_optimized(prompt, retries=3):
     raise HTTPException(status_code=500, detail="Gemini API failed after all retries")
 
 def process_documents(documents: List[str]) -> tuple:
-    """Process documents and return chunks and index"""
+    """Process documents and return chunks and vectors"""
     global embed_model
     
     if embed_model is None:
@@ -326,9 +316,9 @@ def process_documents(documents: List[str]) -> tuple:
     if not all_chunks:
         raise HTTPException(status_code=400, detail="No valid chunks found from documents")
     
-    index, vectors = build_faiss_index_optimized(all_chunks, embed_model)
+    vectors, chunks = build_vector_index_sklearn(all_chunks, embed_model)
     
-    return all_chunks, index
+    return all_chunks, vectors
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -350,7 +340,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="LLM Document Processing API",
     version="2.0.0",
-    description="Optimized API for processing insurance documents with LLM",
+    description="Optimized API for processing insurance documents with LLM (scikit-learn version)",
     lifespan=lifespan
 )
 
@@ -373,7 +363,8 @@ async def health_check():
         "timestamp": time.time(),
         "version": "2.0.0",
         "gemini_configured": bool(GEMINI_API_KEY),
-        "pdf_library": PDF_LIBRARY
+        "pdf_library": PDF_LIBRARY,
+        "vector_search": "scikit-learn"
     }
 
 @app.post("/api/v1/query", response_model=QueryResponse)
@@ -385,10 +376,10 @@ async def process_query(request: QueryRequest):
         if not request.documents:
             raise HTTPException(status_code=400, detail="No documents provided")
         
-        all_chunks, index = process_documents(request.documents)
+        all_chunks, vectors = process_documents(request.documents)
         
-        relevant_chunks = search_chunks_enhanced(
-            index, request.query, embed_model, all_chunks, top_k=request.top_k
+        relevant_chunks = search_chunks_sklearn(
+            vectors, request.query, embed_model, all_chunks, top_k=request.top_k
         )
         
         context = "\n---\n".join(relevant_chunks)
@@ -435,13 +426,13 @@ async def process_query(request: QueryRequest):
 async def run_submission(request: RunRequest):
     """Original API endpoint for compatibility"""
     try:
-        all_chunks, index = process_documents(request.documents)
+        all_chunks, vectors = process_documents(request.documents)
         
         results = []
         for question in request.questions:
             try:
-                relevant_chunks = search_chunks_enhanced(
-                    index, question, embed_model, all_chunks, top_k=5
+                relevant_chunks = search_chunks_sklearn(
+                    vectors, question, embed_model, all_chunks, top_k=5
                 )
                 context = "\n---\n".join(relevant_chunks)
                 prompt = build_enhanced_prompt(context, question)
@@ -461,9 +452,10 @@ async def run_submission(request: RunRequest):
 async def root():
     """Root endpoint"""
     return {
-        "message": "LLM Document Processing API v2.0",
+        "message": "LLM Document Processing API v2.0 (scikit-learn version)",
         "status": "running",
         "pdf_library": PDF_LIBRARY,
+        "vector_search": "scikit-learn",
         "endpoints": {
             "health": "/health",
             "query": "/api/v1/query",
