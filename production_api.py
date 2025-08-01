@@ -17,6 +17,7 @@ import pdfplumber
 from sentence_transformers import SentenceTransformer
 import google.generativeai as genai
 from dotenv import load_dotenv
+import shutil
 
 # Load environment variables
 load_dotenv()
@@ -73,7 +74,7 @@ def load_models():
     
     try:
         # Load embedding model
-        embed_model = SentenceTransformer('all-MiniLM-L6-v2')
+        embed_model = SentenceTransformer('paraphrase-MiniLM-L3-v2')
         logger.info("Embedding model loaded successfully")
         
         # Configure Gemini
@@ -161,7 +162,7 @@ def download_and_extract_text_optimized(url: str) -> str:
         logger.error(f"Error downloading/extracting PDF: {e}")
         raise
 
-def semantic_chunking(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[str]:
+def semantic_chunking(text: str, chunk_size: int = 500, overlap: int = 100) -> List[str]:
     """Create semantic chunks from text"""
     try:
         if len(text) <= chunk_size:
@@ -411,6 +412,13 @@ async def upload_pdf(file: UploadFile = File(...)):
     except Exception as e:
         logger.error(f"Error uploading PDF: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    
+
+
+# At end of /query or /upload-pdf endpoint
+shutil.rmtree(CACHE_DIR)
+CACHE_DIR.mkdir(exist_ok=True)
+
 
 if __name__ == "__main__":
     import uvicorn
